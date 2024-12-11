@@ -5,7 +5,10 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import os
+import matplotlib.pyplot as plt
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 # Enable eager execution for debugging
 tf.config.run_functions_eagerly(True)
@@ -22,7 +25,7 @@ if not os.path.exists(train_dir) or not os.path.exists(val_dir):
 # Hyperparameters
 IMG_HEIGHT = 128
 IMG_WIDTH = 128
-BATCH_SIZE = 32
+BATCH_SIZE = 8  # Reduced for small dataset
 EPOCHS = 20
 
 # Data augmentation and preprocessing
@@ -55,25 +58,23 @@ val_generator = val_datagen.flow_from_directory(
 print(f"Training samples: {train_generator.samples}, Classes: {train_generator.num_classes}")
 print(f"Validation samples: {val_generator.samples}, Classes: {val_generator.num_classes}")
 
-# Model architecture
+# Simplified model architecture
 model = Sequential([
-    Conv2D(32, (3, 3), activation="relu", input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
+    Conv2D(16, (3, 3), activation="relu", input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
     MaxPooling2D((2, 2)),
 
-    Conv2D(64, (3, 3), activation="relu"),
-    MaxPooling2D((2, 2)),
-
-    Conv2D(128, (3, 3), activation="relu"),
+    Conv2D(32, (3, 3), activation="relu"),
     MaxPooling2D((2, 2)),
 
     Flatten(),
-    Dense(128, activation="relu"),
+    Dense(64, activation="relu"),
     Dropout(0.5),
     Dense(train_generator.num_classes, activation="softmax")
 ])
 
 # Compile the model
-model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"], run_eagerly=True)
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+              loss="categorical_crossentropy", metrics=["accuracy"], run_eagerly=True)
 
 # Ensure model save directory exists
 model_save_dir = "../app/backend/models"
@@ -93,5 +94,19 @@ except Exception as e:
 
 # Save the model
 model.save(os.path.join(model_save_dir, "dot_counter.h5"))
+
+# Plot accuracy
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.legend()
+plt.title('Accuracy')
+plt.show()
+
+# Plot loss
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.legend()
+plt.title('Loss')
+plt.show()
 
 print("Model training complete and saved as dot_counter.h5")
