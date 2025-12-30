@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Domino Score Cam</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>Domino Score Cam</h1>
+    <p class="sub">Capture tiles (pips up) → detect pips → add to Team A or Team B</p>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <div class="row">
+        <div class="scoreBox">
+          <div class="label">Team A</div>
+          <div id="scoreA" class="score">0</div>
+        </div>
+        <div class="scoreBox">
+          <div class="label">Team B</div>
+          <div id="scoreB" class="score">0</div>
+        </div>
+      </div>
+
+      <div class="row controls">
+        <label class="pill">
+          <input type="radio" name="team" value="A" checked />
+          <span>Add to Team A</span>
+        </label>
+        <label class="pill">
+          <input type="radio" name="team" value="B" />
+          <span>Add to Team B</span>
+        </label>
+        <button id="resetBtn" class="danger">Reset</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="videoWrap">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="overlay" class="overlay"></canvas>
+      </div>
+
+      <div class="row controls">
+        <button id="startCamBtn">Start Camera</button>
+        <button id="captureBtn" disabled>Capture</button>
+        <button id="scanBtn" disabled>Scan Pips</button>
+      </div>
+
+      <div class="row small">
+        <div class="kv">
+          <div class="k">Detected pips</div>
+          <div id="detected" class="v">—</div>
+        </div>
+        <div class="kv">
+          <div class="k">Status</div>
+          <div id="status" class="v">Open the camera to begin.</div>
+        </div>
+      </div>
+
+      <div class="row controls">
+        <button id="minusBtn" disabled>-</button>
+        <input id="manualValue" type="number" inputmode="numeric" value="0" min="0" />
+        <button id="plusBtn" disabled>+</button>
+        <button id="addBtn" class="primary" disabled>Add Score</button>
+      </div>
+
+      <details class="help">
+        <summary>Tips for better detection</summary>
+        <ul>
+          <li>Lay tiles on a plain, matte surface (white/gray works great).</li>
+          <li>Make sure pips are facing up and not glossy from glare.</li>
+          <li>Fill most of the frame with the tiles, keep the camera steady.</li>
+          <li>If it’s off by a bit, use +/- or type the value before adding.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>Debug (optional)</h2>
+      <canvas id="capture" class="debug"></canvas>
+      <canvas id="processed" class="debug"></canvas>
+    </section>
+  </main>
+
+  <!-- OpenCV.js CDN - official release for GitHub Pages -->
+  <!-- Alternative CDNs if this fails: unpkg.com/opencv-js or cdn.jsdelivr.net/npm/opencv-js -->
+  <script async src="https://docs.opencv.org/4.10.0/opencv.js" type="text/javascript" onload="console.log('OpenCV.js loaded')" onerror="console.error('Failed to load OpenCV.js - check network connection')"></script>
+  <script src="app.js"></script>
+</body>
+</html>
