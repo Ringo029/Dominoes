@@ -250,7 +250,7 @@ function padRect(r, pad, maxW, maxH) {
   return new cv.Rect(x, y, w, h);
 }
 
-// --- Helper: Blob-based pip detection (more reliable than circularity) ---
+// --- Helper: Pip detection using contours (reliable fallback) ---
 function countPipsBlobDetector(roiGray) {
   const blur = new cv.Mat();
   cv.GaussianBlur(roiGray, blur, new cv.Size(5, 5), 0);
@@ -262,43 +262,65 @@ function countPipsBlobDetector(roiGray) {
   const closed = new cv.Mat();
   cv.morphologyEx(bin, closed, cv.MORPH_CLOSE, k);
 
-  const params = new cv.SimpleBlobDetector_Params();
+  // Use contour-based detection (most reliable in OpenCV.js)
+  return countPipsContours(roiGray, closed, blur, bin, k);
+}
+
+// --- Fallback: Contour-based pip detection ---
+function countPipsContours(roiGray, closed, blur, bin, k) {
+  // If closed mat not provided, create it
+  let needsCleanup = false;
+  if (!closed) {
+    needsCleanup = true;
+    blur = new cv.Mat();
+    cv.GaussianBlur(roiGray, blur, new cv.Size(5, 5), 0);
+    bin = new cv.Mat();
+    cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+    k = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
+    closed = new cv.Mat();
+    cv.morphologyEx(bin, closed, cv.MORPH_CLOSE, k);
+  }
+
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  cv.findContours(closed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
   const roiArea = roiGray.cols * roiGray.rows;
-
-  params.filterByArea = true;
-  params.minArea = Math.max(18, roiArea * 0.00010);
-  params.maxArea = roiArea * 0.02;
-
-  params.filterByCircularity = true;
-  params.minCircularity = 0.15;
-
-  params.filterByInertia = true;
-  params.minInertiaRatio = 0.05;
-
-  params.filterByConvexity = true;
-  params.minConvexity = 0.25;
-
-  const detector = new cv.SimpleBlobDetector(params);
-  const keypoints = new cv.KeyPointVector();
-  detector.detect(closed, keypoints);
+  const minArea = Math.max(25, roiArea * 0.00015);
+  const maxArea = roiArea * 0.01;
 
   const pipRects = [];
-  for (let i = 0; i < keypoints.size(); i++) {
-    const kp = keypoints.get(i);
-    const rad = Math.max(6, Math.round(kp.size / 2));
+  let count = 0;
+
+  for (let i = 0; i < contours.size(); i++) {
+    const c = contours.get(i);
+    const area = cv.contourArea(c);
+    if (area < minArea || area > maxArea) continue;
+
+    const perim = cv.arcLength(c, true);
+    if (perim <= 0) continue;
+
+    const circularity = (4 * Math.PI * area) / (perim * perim);
+    if (circularity < 0.30) continue;
+
+    const r = cv.boundingRect(c);
+    const asp = r.width / r.height;
+    if (asp < 0.55 || asp > 1.8) continue;
+
+    count++;
     pipRects.push({
-      x: Math.round(kp.pt.x - rad),
-      y: Math.round(kp.pt.y - rad),
-      width: rad * 2,
-      height: rad * 2
+      x: r.x,
+      y: r.y,
+      width: r.width,
+      height: r.height
     });
   }
 
-  const count = keypoints.size();
-
   // Cleanup
-  blur.delete(); bin.delete(); closed.delete(); k.delete();
-  keypoints.delete(); detector.delete();
+  contours.delete(); hierarchy.delete();
+  if (needsCleanup) {
+    blur.delete(); bin.delete(); closed.delete(); k.delete();
+  }
 
   return { count, pipRects };
 }
