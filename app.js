@@ -266,8 +266,7 @@ function countPipsBlobDetector(roiGray) {
   const roiArea = roiGray.cols * roiGray.rows;
 
   params.filterByArea = true;
-  // Slightly higher minArea to filter out small glare/rivet false positives
-  params.minArea = Math.max(22, roiArea * 0.00012);
+  params.minArea = Math.max(18, roiArea * 0.00010);
   params.maxArea = roiArea * 0.02;
 
   params.filterByCircularity = true;
