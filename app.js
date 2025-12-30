@@ -195,109 +195,202 @@ function waitForOpenCV() {
 }
 waitForOpenCV();
 
-// --- Pip detection (heuristic) ---
-function detectPipsOpenCV() {
-  // Read capture canvas into OpenCV Mat
-  const src = cv.imread(capCanvas);
-  const gray = new cv.Mat();
-  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-  // Reduce noise, then threshold
+// --- Helper: Find domino tile rectangles ---
+function findTileRects(gray) {
+  // Tiles are bright vs wood background → threshold without inversion
   const blur = new cv.Mat();
-  cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+  cv.GaussianBlur(gray, blur, new cv.Size(7, 7), 0);
 
-  const bin = new cv.Mat();
-  // Fixed threshold with Otsu (better for dark pips on light tiles)
-  // Otsu automatically finds the best cutoff for black pips
-  cv.threshold(
-    blur,
-    bin,
-    0,
-    255,
-    cv.THRESH_BINARY_INV + cv.THRESH_OTSU
-  );
+  const tileBin = new cv.Mat();
+  cv.threshold(blur, tileBin, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
 
-  // Close holes so pips are solid (larger kernel fills rings)
-  const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
+  // Close to solidify tile regions
+  const k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(9, 9));
   const closed = new cv.Mat();
-  cv.morphologyEx(bin, closed, cv.MORPH_CLOSE, kernel);
+  cv.morphologyEx(tileBin, closed, cv.MORPH_CLOSE, k);
 
-  // Find contours
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   cv.findContours(closed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-  // Filter contours that look like pip circles
-  const pipRects = [];
-  let pipCount = 0;
-
-  const imgArea = src.cols * src.rows;
-  const minArea = Math.max(20, imgArea * 0.00001);    // scale with image size
-  const maxArea = imgArea * 0.002;                    // avoid big blobs
+  const imgArea = gray.cols * gray.rows;
+  const candidates = [];
 
   for (let i = 0; i < contours.size(); i++) {
     const c = contours.get(i);
     const area = cv.contourArea(c);
-    if (area < minArea || area > maxArea) continue;
-
-    const perimeter = cv.arcLength(c, true);
-    if (perimeter <= 0) continue;
-    const circularity = (4 * Math.PI * area) / (perimeter * perimeter);
-
-    // pips should be fairly circular (relaxed for domino pips which may be slightly distorted)
-    if (circularity < 0.35) continue;
+    if (area < imgArea * 0.01) continue; // ignore small blobs
 
     const r = cv.boundingRect(c);
     const aspect = r.width / r.height;
-    if (aspect < 0.6 || aspect > 1.6) continue;
+    // Domino tile aspect: allow both orientations
+    const okAspect = (aspect > 0.30 && aspect < 0.80) || (aspect > 1.25 && aspect < 3.2);
+    if (!okAspect) continue;
 
-    pipCount++;
-    pipRects.push(r);
+    candidates.push({ r, area });
   }
 
-  // Draw debug overlays on processed canvas
-  procCanvas.width = capCanvas.width;
-  procCanvas.height = capCanvas.height;
-  cv.imshow(procCanvas, closed);
+  // pick the 2 largest rectangles
+  candidates.sort((a, b) => b.area - a.area);
+  const top = candidates.slice(0, 2).map(x => x.r);
 
-  // Draw rectangles over video overlay (scaled)
-  drawOverlayRects(pipRects, src.cols, src.rows);
+  blur.delete(); tileBin.delete(); closed.delete();
+  contours.delete(); hierarchy.delete(); k.delete();
 
-  // Cleanup
-  src.delete(); gray.delete(); blur.delete(); bin.delete();
-  closed.delete();
-  contours.delete(); hierarchy.delete();
-  kernel.delete();
-
-  return { count: pipCount };
+  return top;
 }
 
-function drawOverlayRects(rects, srcW, srcH) {
-  // Overlay canvas is sized to displayed video, not capture canvas.
+// --- Helper: Add padding to tile rectangles (prevents edge pips being cut) ---
+function padRect(r, pad, maxW, maxH) {
+  const x = Math.max(0, r.x - pad);
+  const y = Math.max(0, r.y - pad);
+  const w = Math.min(maxW - x, r.width + pad * 2);
+  const h = Math.min(maxH - y, r.height + pad * 2);
+  return new cv.Rect(x, y, w, h);
+}
+
+// --- Helper: Blob-based pip detection (more reliable than circularity) ---
+function countPipsBlobDetector(roiGray) {
+  const blur = new cv.Mat();
+  cv.GaussianBlur(roiGray, blur, new cv.Size(5, 5), 0);
+
+  const bin = new cv.Mat();
+  cv.threshold(blur, bin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+  const k = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
+  const closed = new cv.Mat();
+  cv.morphologyEx(bin, closed, cv.MORPH_CLOSE, k);
+
+  const params = new cv.SimpleBlobDetector_Params();
+  const roiArea = roiGray.cols * roiGray.rows;
+
+  params.filterByArea = true;
+  params.minArea = Math.max(18, roiArea * 0.00010);
+  params.maxArea = roiArea * 0.02;
+
+  params.filterByCircularity = true;
+  params.minCircularity = 0.15;
+
+  params.filterByInertia = true;
+  params.minInertiaRatio = 0.05;
+
+  params.filterByConvexity = true;
+  params.minConvexity = 0.25;
+
+  const detector = new cv.SimpleBlobDetector(params);
+  const keypoints = new cv.KeyPointVector();
+  detector.detect(closed, keypoints);
+
+  const pipRects = [];
+  for (let i = 0; i < keypoints.size(); i++) {
+    const kp = keypoints.get(i);
+    const rad = Math.max(6, Math.round(kp.size / 2));
+    pipRects.push({
+      x: Math.round(kp.pt.x - rad),
+      y: Math.round(kp.pt.y - rad),
+      width: rad * 2,
+      height: rad * 2
+    });
+  }
+
+  const count = keypoints.size();
+
+  // Cleanup
+  blur.delete(); bin.delete(); closed.delete(); k.delete();
+  keypoints.delete(); detector.delete();
+
+  return { count, pipRects };
+}
+
+// --- Pip detection (tile-first approach) ---
+function detectPipsOpenCV() {
+  const src = cv.imread(capCanvas);
+  const gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+  const tileRects = findTileRects(gray);
+
+  let totalPips = 0;
+  const allPipRects = [];
+  const tileDebugRects = [];
+
+  for (const tr0 of tileRects) {
+    const tr = padRect(tr0, 8, gray.cols, gray.rows); // 8px pad
+    tileDebugRects.push(tr);
+
+    // Crop ROI
+    const roiGray = gray.roi(tr);
+
+    // Use blob detector for more tolerant pip detection
+    const { count, pipRects } = countPipsBlobDetector(roiGray);
+    totalPips += count;
+
+    // Convert ROI rects → full image coords
+    for (const r of pipRects) {
+      allPipRects.push({
+        x: r.x + tr.x,
+        y: r.y + tr.y,
+        width: r.width,
+        height: r.height
+      });
+    }
+
+    roiGray.delete();
+  }
+
+  // Debug: show full-frame threshold (helps tune)
+  procCanvas.width = capCanvas.width;
+  procCanvas.height = capCanvas.height;
+
+  const dbgBlur = new cv.Mat();
+  cv.GaussianBlur(gray, dbgBlur, new cv.Size(5, 5), 0);
+  const dbgBin = new cv.Mat();
+  cv.threshold(dbgBlur, dbgBin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  const dbgK = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
+  const dbgClosed = new cv.Mat();
+  cv.morphologyEx(dbgBin, dbgClosed, cv.MORPH_CLOSE, dbgK);
+
+  cv.imshow(procCanvas, dbgClosed);
+
+  dbgBlur.delete(); dbgBin.delete(); dbgClosed.delete(); dbgK.delete();
+
+  // Draw rectangles over video overlay (scaled)
+  drawOverlay(tileDebugRects, allPipRects, src.cols, src.rows);
+
+  // Cleanup
+  src.delete(); gray.delete();
+
+  return { count: totalPips };
+}
+
+function drawOverlay(tileRects, pipRects, srcW, srcH) {
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-  // Simple label
-  ctx.font = `${14 * devicePixelRatio}px ui-sans-serif`;
-  ctx.fillStyle = "rgba(255,255,255,.85)";
-  ctx.fillText("Detected pips", 12 * devicePixelRatio, 22 * devicePixelRatio);
+  // Map capture coords → overlay coords
+  const sx = overlay.width / srcW;
+  const sy = overlay.height / srcH;
 
-  // Draw count badge
-  ctx.fillStyle = "rgba(0,0,0,.45)";
-  ctx.fillRect(12 * devicePixelRatio, 28 * devicePixelRatio, 170 * devicePixelRatio, 28 * devicePixelRatio);
-  ctx.fillStyle = "rgba(255,255,255,.9)";
-  ctx.fillText(`Pips: ${manualValue.value || 0}`, 20 * devicePixelRatio, 48 * devicePixelRatio);
-  
-  // Optional: Draw detected pip locations (scaled to video view)
-  if (rects.length > 0 && video.videoWidth > 0) {
-    const scaleX = overlay.width / srcW;
-    const scaleY = overlay.height / srcH;
-    ctx.strokeStyle = "rgba(31,111,235,.6)";
-    ctx.lineWidth = 1.5 * devicePixelRatio;
-    rects.forEach(r => {
-      ctx.strokeRect(r.x * scaleX, r.y * scaleY, r.width * scaleX, r.height * scaleY);
-    });
+  // draw tiles (white outlines)
+  ctx.strokeStyle = "rgba(255,255,255,.85)";
+  ctx.lineWidth = 2 * devicePixelRatio;
+  for (const r of tileRects) {
+    ctx.strokeRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
   }
+
+  // draw pips (blue outlines)
+  ctx.strokeStyle = "rgba(31,111,235,.95)";
+  ctx.lineWidth = 2 * devicePixelRatio;
+  for (const r of pipRects) {
+    ctx.strokeRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
+  }
+
+  // label
+  ctx.fillStyle = "rgba(0,0,0,.5)";
+  ctx.fillRect(10 * devicePixelRatio, 10 * devicePixelRatio, 160 * devicePixelRatio, 30 * devicePixelRatio);
+  ctx.fillStyle = "rgba(255,255,255,.95)";
+  ctx.font = `${14 * devicePixelRatio}px system-ui`;
+  ctx.fillText(`Pips: ${manualValue.value || 0}`, 18 * devicePixelRatio, 31 * devicePixelRatio);
 }
 
 // Init
