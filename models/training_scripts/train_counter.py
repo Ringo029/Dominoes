@@ -14,7 +14,10 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 tf.config.run_functions_eagerly(True)
 
 # Directories for training and validation data
-data_dir = r"C:\Users\chris\OneDrive\Desktop\Dominoes\data\processed"
+# Use relative path from script location (more portable and secure)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.join(script_dir, "..", "..")
+data_dir = os.path.join(project_root, "data", "processed")
 train_dir = os.path.join(data_dir, "train")
 val_dir = os.path.join(data_dir, "val")
 

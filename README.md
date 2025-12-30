@@ -38,6 +38,21 @@ A simple MVP web app for counting domino tile pips (dots) using your phone camer
 
 **Note:** GitHub Pages serves over HTTPS, which is required for camera access.
 
+## Security & Privacy
+
+✅ **Security measures in place:**
+- No API keys or secrets in the code
+- All processing happens client-side (no data sent to servers)
+- Camera access requires user permission (browser security)
+- Scores stored only in browser localStorage (local to your device)
+- No hardcoded user paths or personal information
+- `.gitignore` configured to exclude sensitive files
+
+**Before publishing:**
+- Review `.gitignore` to ensure training data/images aren't committed
+- The `data/` folder is excluded by default (large image files)
+- Model files (`.h5`) are included but can be excluded if too large
+
 ## Technical Details
 
 - **OpenCV.js**: Used for image processing and pip detection via contour filtering

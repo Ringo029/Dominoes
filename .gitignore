@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Model files (if large, uncomment to exclude from repo)
+# *.h5
+# *.pb
+# *.tflite
+# *.onnx
+
+# Training data (exclude large image datasets)
+data/processed/
+data/raw/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+# Keep data structure but ignore images
+!data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# OneDrive sync files
+~$*
+
