@@ -207,23 +207,20 @@ function detectPipsOpenCV() {
   cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
 
   const bin = new cv.Mat();
-  // Adaptive works well across lighting changes
-  cv.adaptiveThreshold(
-    blur, bin,
+  // Fixed threshold with Otsu (better for dark pips on light tiles)
+  // Otsu automatically finds the best cutoff for black pips
+  cv.threshold(
+    blur,
+    bin,
+    0,
     255,
-    cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-    cv.THRESH_BINARY_INV,
-    31,
-    7
+    cv.THRESH_BINARY_INV + cv.THRESH_OTSU
   );
 
-  // Morphological opening to remove specks, then close to solidify pips
-  const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(3, 3));
-  const opened = new cv.Mat();
-  cv.morphologyEx(bin, opened, cv.MORPH_OPEN, kernel);
-
+  // Close holes so pips are solid (larger kernel fills rings)
+  const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5));
   const closed = new cv.Mat();
-  cv.morphologyEx(opened, closed, cv.MORPH_CLOSE, kernel);
+  cv.morphologyEx(bin, closed, cv.MORPH_CLOSE, kernel);
 
   // Find contours
   const contours = new cv.MatVector();
@@ -247,8 +244,8 @@ function detectPipsOpenCV() {
     if (perimeter <= 0) continue;
     const circularity = (4 * Math.PI * area) / (perimeter * perimeter);
 
-    // pips should be fairly circular
-    if (circularity < 0.55) continue;
+    // pips should be fairly circular (relaxed for domino pips which may be slightly distorted)
+    if (circularity < 0.35) continue;
 
     const r = cv.boundingRect(c);
     const aspect = r.width / r.height;
@@ -268,7 +265,7 @@ function detectPipsOpenCV() {
 
   // Cleanup
   src.delete(); gray.delete(); blur.delete(); bin.delete();
-  opened.delete(); closed.delete();
+  closed.delete();
   contours.delete(); hierarchy.delete();
   kernel.delete();
 
