@@ -147,7 +147,7 @@ addBtn.addEventListener("click", () => {
   scoreBEl.textContent = b;
   saveScores(a, b);
 
-  // Reset for next capture
+  // Reset for next capture (auto-advance workflow)
   detectedEl.textContent = "—";
   manualValue.value = "0";
   lastCaptureReady = false;
@@ -155,8 +155,9 @@ addBtn.addEventListener("click", () => {
   addBtn.disabled = true;
   minusBtn.disabled = true;
   plusBtn.disabled = true;
+  captureBtn.disabled = false; // Re-enable capture for next hand
 
-  setStatus(`Added ${v} to Team ${team}. Capture again for next hand.`);
+  setStatus(`Added ${v} to Team ${team}. Ready for next hand — tap Capture.`);
 });
 
 resetBtn.addEventListener("click", () => {
@@ -265,7 +266,8 @@ function countPipsBlobDetector(roiGray) {
   const roiArea = roiGray.cols * roiGray.rows;
 
   params.filterByArea = true;
-  params.minArea = Math.max(18, roiArea * 0.00010);
+  // Slightly higher minArea to filter out small glare/rivet false positives
+  params.minArea = Math.max(22, roiArea * 0.00012);
   params.maxArea = roiArea * 0.02;
 
   params.filterByCircularity = true;
