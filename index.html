@@ -8,87 +8,154 @@
 </head>
 <body>
   <header class="top">
-    <h1>Domino Score Cam</h1>
-    <p class="sub">Capture tiles (pips up) → detect pips → add to Team A or Team B</p>
+    <div class="brand">
+      <div class="logo">🁫</div>
+      <div class="brandText">
+        <h1>Domino Score Cam</h1>
+        <p class="sub">Point camera → Scan → Tap team to add</p>
+      </div>
+    </div>
   </header>
 
   <main class="wrap">
-    <section class="card">
-      <div class="row">
-        <div class="scoreBox">
-          <div class="label">Team A</div>
-          <div id="scoreA" class="score">0</div>
+
+    <!-- SCOREBOARD -->
+    <section class="card scoreboard">
+      <div class="scoreRow">
+        <div class="teamCard teamA">
+          <div class="teamName">Team A</div>
+          <div id="scoreA" class="teamScore">0</div>
+          <button id="addTeamABtn" class="teamAddBtn">+ Add to A</button>
         </div>
-        <div class="scoreBox">
-          <div class="label">Team B</div>
-          <div id="scoreB" class="score">0</div>
+
+        <div class="teamCard teamB">
+          <div class="teamName">Team B</div>
+          <div id="scoreB" class="teamScore">0</div>
+          <button id="addTeamBBtn" class="teamAddBtn">+ Add to B</button>
         </div>
       </div>
 
-      <div class="row controls">
-        <label class="pill">
-          <input type="radio" name="team" value="A" checked />
-          <span>Add to Team A</span>
-        </label>
-        <label class="pill">
-          <input type="radio" name="team" value="B" />
-          <span>Add to Team B</span>
-        </label>
+      <div class="scoreActions">
+        <!-- keep the original reset id -->
         <button id="resetBtn" class="danger">Reset</button>
+
+        <!-- hidden radios kept for backward compatibility with your JS -->
+        <div class="hiddenCompat">
+          <label>
+            <input type="radio" name="team" value="A" checked />
+            <span>Add to Team A</span>
+          </label>
+          <label>
+            <input type="radio" name="team" value="B" />
+            <span>Add to Team B</span>
+          </label>
+        </div>
       </div>
     </section>
 
+    <!-- CAMERA + SCAN -->
     <section class="card">
       <div class="videoWrap">
         <video id="video" playsinline autoplay muted></video>
         <canvas id="overlay" class="overlay"></canvas>
-      </div>
 
-      <div class="row controls">
-        <button id="startCamBtn">Start Camera</button>
-        <button id="captureBtn" disabled>Capture</button>
-        <button id="scanBtn" disabled>Scan Pips</button>
-      </div>
-
-      <div class="row small">
-        <div class="kv">
-          <div class="k">Detected pips</div>
-          <div id="detected" class="v">—</div>
-        </div>
-        <div class="kv">
-          <div class="k">Status</div>
-          <div id="status" class="v">Open the camera to begin.</div>
+        <!-- BIG SCORE CHIP -->
+        <div class="scoreChip" aria-live="polite">
+          <div class="chipLabel">Detected</div>
+          <div id="detected" class="chipValue">—</div>
         </div>
       </div>
 
-      <div class="row controls">
-        <button id="minusBtn" disabled>-</button>
-        <input id="manualValue" type="number" inputmode="numeric" value="0" min="0" />
-        <button id="plusBtn" disabled>+</button>
-        <button id="addBtn" class="primary" disabled>Add Score</button>
+      <!-- STATUS -->
+      <div class="statusLine">
+        <div class="statusDot"></div>
+        <div id="status" class="statusText">Open the camera to begin.</div>
+      </div>
+
+      <!-- QUICK ADJUST -->
+      <div class="adjustRow">
+        <button id="minusBtn" class="iconBtn" disabled aria-label="Decrease score">−</button>
+
+        <input id="manualValue"
+               class="bigNumber"
+               type="number"
+               inputmode="numeric"
+               value="0"
+               min="0" />
+
+        <button id="plusBtn" class="iconBtn" disabled aria-label="Increase score">+</button>
+
+        <!-- keep original add id (used by JS) -->
+        <button id="addBtn" class="primary bigAdd" disabled>Add</button>
+      </div>
+
+      <!-- PRIMARY CONTROLS -->
+      <div class="controlGrid">
+        <button id="startCamBtn" class="soft">Start Camera</button>
+        <button id="captureBtn" class="soft" disabled>Capture</button>
+        <button id="scanBtn" class="soft" disabled>Scan</button>
       </div>
 
       <details class="help">
         <summary>Tips for better detection</summary>
         <ul>
-          <li>Lay tiles on a plain, matte surface (white/gray works great).</li>
-          <li>Make sure pips are facing up and not glossy from glare.</li>
-          <li>Fill most of the frame with the tiles, keep the camera steady.</li>
-          <li>If it’s off by a bit, use +/- or type the value before adding.</li>
+          <li>Lay tiles on a plain, matte surface.</li>
+          <li>Avoid glare (tilt phone slightly, softer light helps).</li>
+          <li>Keep tiles centered and steady when scanning.</li>
+          <li>If it's off, tap +/- once or twice and add.</li>
         </ul>
       </details>
     </section>
 
-    <section class="card">
-      <h2>Debug (optional)</h2>
+    <!-- DEBUG (COLLAPSIBLE) -->
+    <details class="card debugCard">
+      <summary class="debugSummary">Debug (optional)</summary>
       <canvas id="capture" class="debug"></canvas>
       <canvas id="processed" class="debug"></canvas>
-    </section>
+    </details>
+
   </main>
 
-  <!-- OpenCV.js CDN - official release for GitHub Pages -->
-  <!-- Alternative CDNs if this fails: unpkg.com/opencv-js or cdn.jsdelivr.net/npm/opencv-js -->
-  <script async src="https://docs.opencv.org/4.10.0/opencv.js" type="text/javascript" onload="console.log('OpenCV.js loaded')" onerror="console.error('Failed to load OpenCV.js - check network connection')"></script>
+  <!-- Sticky bottom bar (mobile-friendly actions) -->
+  <nav class="bottomBar" role="navigation" aria-label="Quick actions">
+    <button id="bottomScan" class="bottomBtn" disabled>Scan</button>
+    <button id="bottomAddA" class="bottomBtn primary" disabled>+ Team A</button>
+    <button id="bottomAddB" class="bottomBtn primary" disabled>+ Team B</button>
+  </nav>
+
+  <script async src="https://docs.opencv.org/4.10.0/opencv.js" type="text/javascript"></script>
   <script src="app.js"></script>
+
+  <!-- Tiny UI glue (no logic change) -->
+  <script>
+    // Bridge new UI buttons to your existing logic (radio + addBtn)
+    const pickTeam = (team) => {
+      const r = document.querySelector(`input[name="team"][value="${team}"]`);
+      if (r) r.checked = true;
+    };
+
+    const clickIfEnabled = (el) => {
+      if (el && !el.disabled) el.click();
+    };
+
+    // Top team buttons
+    document.getElementById('addTeamABtn')?.addEventListener('click', () => { pickTeam('A'); clickIfEnabled(document.getElementById('addBtn')); });
+    document.getElementById('addTeamBBtn')?.addEventListener('click', () => { pickTeam('B'); clickIfEnabled(document.getElementById('addBtn')); });
+
+    // Bottom bar buttons
+    document.getElementById('bottomScan')?.addEventListener('click', () => clickIfEnabled(document.getElementById('scanBtn')));
+    document.getElementById('bottomAddA')?.addEventListener('click', () => { pickTeam('A'); clickIfEnabled(document.getElementById('addBtn')); });
+    document.getElementById('bottomAddB')?.addEventListener('click', () => { pickTeam('B'); clickIfEnabled(document.getElementById('addBtn')); });
+
+    // Keep bottom buttons enabled state in sync
+    const syncBottomButtons = () => {
+      const scan = document.getElementById('scanBtn');
+      const add = document.getElementById('addBtn');
+      document.getElementById('bottomScan').disabled = !scan || scan.disabled;
+      document.getElementById('bottomAddA').disabled = !add || add.disabled;
+      document.getElementById('bottomAddB').disabled = !add || add.disabled;
+    };
+    setInterval(syncBottomButtons, 250);
+  </script>
 </body>
 </html>
